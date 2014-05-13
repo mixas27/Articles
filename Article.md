@@ -125,54 +125,10 @@ public class CachedRememberMeTokenInfo {
     }
 }
 ```
-Далее нам необходимо создать класс **__RememberMeServices__**, расширяющий стандартный класс **__PersistentTokenBasedRememberMeServices__** и переопределить в нём метод __processAutoLoginCookie__, таким образом, чтобы при первом запросе инфомация о токене сохранялась в кэш, и вход пользователя выполнялся в штатном режиме. При последующих  же запросах необходимо проверять кэш на наличие текущего токена, и, если такой присутствует и был сохранён недавно, выполнять вход пользователя без вызова метода класса предка. Ниже представлена моя реализация данного класса: 
+Далее нам необходимо создать класс **__ThrottlingRememberMeService__**, расширяющий стандартный класс **__PersistentTokenBasedRememberMeServices__** и переопределить в нём метод __processAutoLoginCookie__, таким образом, чтобы при первом запросе инфомация о токене сохранялась в кэш, и вход пользователя выполнялся в штатном режиме. При последующих  же запросах необходимо проверять кэш на наличие текущего токена, и, если такой присутствует и был сохранён недавно, выполнять вход пользователя без вызова метода класса предка. Ниже представлена моя реализация данного класса: 
 
 ```java
-public class RememberMeServices extends PersistentTokenBasedRememberMeServices {
-    private final static String REMOVE_TOKEN_QUERY = "DELETE FROM persistent_logins WHERE series = ? AND token = ?";
-    // We should store a lot of tokens to prevent cache overflow
-    private static final int TOKEN_CACHE_MAX_SIZE = 100;
-    private final RememberMeCookieDecoder rememberMeCookieDecoder;
-    private final JdbcTemplate jdbcTemplate;
-    private final Map<String, CachedRememberMeTokenInfo> tokenCache = new ConcurrentHashMap<>();
-    private PersistentTokenRepository tokenRepository = new InMemoryTokenRepositoryImpl();
-    // 5 seconds should be enough for processing request and sending response to client
-    private int cachedTokenValidityTime = 5 * 1000;
-
-    /**
-     * @param rememberMeCookieDecoder needed for extracting rememberme cookies
-     * @param jdbcTemplate            needed to execute the sql queries
-     * @throws Exception - see why {@link PersistentTokenBasedRememberMeServices} throws it
-     */
-    public RememberMeServices(RememberMeCookieDecoder rememberMeCookieDecoder, JdbcTemplate jdbcTemplate)
-            throws Exception {
-        super();
-        this.rememberMeCookieDecoder = rememberMeCookieDecoder;
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    /**
-     * Causes a logout to be completed. The method must complete successfully.
-     * Removes client's token which is extracted from the HTTP request.
-     * {@inheritDoc}
-     */
-    @Override
-    public void logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
-        String cookie = rememberMeCookieDecoder.exctractRememberMeCookieValue(request);
-        if (cookie != null) {
-            String[] seriesAndToken = rememberMeCookieDecoder.extractSeriesAndToken(cookie);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Logout of user " + (authentication == null ? "Unknown" : authentication.getName()));
-            }
-            cancelCookie(request, response);
-            jdbcTemplate.update(REMOVE_TOKEN_QUERY, seriesAndToken);
-            tokenCache.remove(seriesAndToken[0]);
-            validateTokenCache();
-        }
-    }
-
-    /**
-     * Solution for preventing "remember-me" bug. Some browsers sendspublic class ThrottlingRememberMeService extends PersistentTokenBasedRememberMeServices {
+public class ThrottlingRememberMeService extends PersistentTokenBasedRememberMeServices {
     private final static String REMOVE_TOKEN_QUERY = "DELETE FROM persistent_logins WHERE series = ? AND token = ?";
     // We should store a lot of tokens to prevent cache overflow
     private static final int TOKEN_CACHE_MAX_SIZE = 100;
