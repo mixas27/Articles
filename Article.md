@@ -172,6 +172,50 @@ public class RememberMeServices extends PersistentTokenBasedRememberMeServices {
     }
 
     /**
+     * Solution for preventing "remember-me" bug. Some browsers sendspublic class ThrottlingRememberMeService extends PersistentTokenBasedRememberMeServices {
+    private final static String REMOVE_TOKEN_QUERY = "DELETE FROM persistent_logins WHERE series = ? AND token = ?";
+    // We should store a lot of tokens to prevent cache overflow
+    private static final int TOKEN_CACHE_MAX_SIZE = 100;
+    private final RememberMeCookieDecoder rememberMeCookieDecoder;
+    private final JdbcTemplate jdbcTemplate;
+    private final Map<String, CachedRememberMeTokenInfo> tokenCache = new ConcurrentHashMap<>();
+    private PersistentTokenRepository tokenRepository = new InMemoryTokenRepositoryImpl();
+    // 5 seconds should be enough for processing request and sending response to client
+    private int cachedTokenValidityTime = 5 * 1000;
+
+    /**
+     * @param rememberMeCookieDecoder needed for extracting rememberme cookies
+     * @param jdbcTemplate            needed to execute the sql queries
+     * @throws Exception - see why {@link PersistentTokenBasedRememberMeServices} throws it
+     */
+    public ThrottlingRememberMeService(RememberMeCookieDecoder rememberMeCookieDecoder, JdbcTemplate jdbcTemplate)
+            throws Exception {
+        super();
+        this.rememberMeCookieDecoder = rememberMeCookieDecoder;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * Causes a logout to be completed. The method must complete successfully.
+     * Removes client's token which is extracted from the HTTP request.
+     * {@inheritDoc}
+     */
+    @Override
+    public void logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+        String cookie = rememberMeCookieDecoder.exctractRememberMeCookieValue(request);
+        if (cookie != null) {
+            String[] seriesAndToken = rememberMeCookieDecoder.extractSeriesAndToken(cookie);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Logout of user " + (authentication == null ? "Unknown" : authentication.getName()));
+            }
+            cancelCookie(request, response);
+            jdbcTemplate.update(REMOVE_TOKEN_QUERY, seriesAndToken);
+            tokenCache.remove(seriesAndToken[0]);
+            validateTokenCache();
+        }
+    }
+
+    /**
      * Solution for preventing "remember-me" bug. Some browsers sends preloading requests to server to speed-up
      * page loading. It may cause error when response of preload request not returned to client and second request
      * from client was send. This method implementation stores token in cache for <link>CACHED_TOKEN_VALIDITY_TIME</link>
