@@ -108,4 +108,3 @@ Jboss Cache|Yes|No|No|Yes
 * https://docs.jboss.org/hibernate/orm/3.3/reference/en/html/performance.html
 * http://balamaci.wordpress.com/category/java/caching/
 * http://docs.jboss.org/jbossclustering/hibernate-caching/3.3/en-US/html/concepts-cache-attributes.html
-tets
